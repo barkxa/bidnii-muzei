@@ -1455,7 +1455,7 @@ function addLog(o,t){const log=$("log"),d=document.createElement("div");if(o){co
 
 /* ================= Actions: sit, hand, hug, eat ================= */
 const ACT_TXT={hand:"хөтлөлцөх",hug:"тэврэх",kiss:"үнсэх"};
-function nearestOther(maxD){let best=null,bd=maxD;for(const o of others.values()){const d=Math.hypot(o.x-me.x,o.z-me.z);if(d<bd){bd=d;best=o}}return best}
+function nearestOther(maxD){let best=null,bd=maxD;for(const o of others.values()){const d=Math.hypot(o.tx-me.x,o.tz-me.z);if(d<bd){bd=d;best=o}}return best}
 function freeSeat(){let best=null,bd=1.9;for(const s of seats){const d=Math.hypot(s.x-me.x,s.z-me.z);if(d>=bd)continue;let taken=false;for(const o of others.values())if(o.p==="sit"&&Math.hypot(o.x-s.x,o.z-s.z)<.3)taken=true;if(!taken){bd=d;best=s}}return best}
 function standUp(){if(!me.sit)return;const s=me.sit;me.sit=null;const fx=s.x-Math.sin(s.yaw)*.8,fz=s.z-Math.cos(s.yaw)*.8;if(!collides(fx,fz)){me.x=fx;me.z=fz}}
 function doAction(k){if(!entered)return;
@@ -1595,7 +1595,9 @@ function perfTick(now){PERF.n++;if(!PERF.t0){PERF.t0=now;return}const el=now-PER
   if(PERF.show)$("fps").textContent=Math.round(fps)+" FPS · "+PERF.pr.toFixed(2)+"x"}
 /* ================= Keep the partner in sync even when this window is in the background ================= */
 let lastFrameAt=0;
-function followTarget(o,raw){const ox=raw?o.tx:o.x,oz=raw?o.tz:o.z,oy=raw?o.ty:o.y;
+function followTarget(o,raw){return linkSpot(raw?o.tx:o.x,raw?o.tz:o.z,raw?o.ty:o.y)}
+// where the follower stands relative to the leader at (ox,oz) facing oy
+function linkSpot(ox,oz,oy){
   if(myLink.k==="hand")return[ox+Math.cos(oy)*.82,oz-Math.sin(oy)*.82,oy];
   const D=myLink.k==="kiss"?.54:.36;return[ox-Math.sin(oy)*D,oz-Math.cos(oy)*D,oy+PI]}
 function currentPose(){return me.sit?"sit":myLink?(myLink.k==="hug"?"hug":myLink.k==="kiss"?"kiss":(myLink.lead?"hand-r":"hand-l")):me.py>.05?"jump":null}
@@ -1623,8 +1625,7 @@ function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;l
     let f=0,s=0;if(!typing()){if(keys.has("KeyW")||keys.has("ArrowUp"))f++;if(keys.has("KeyS")||keys.has("ArrowDown"))f--;if(keys.has("KeyD"))s++;if(keys.has("KeyA"))s--;if(keys.has("ArrowLeft"))me.camYaw+=1.8*dt;if(keys.has("ArrowRight"))me.camYaw-=1.8*dt}
     f-=joy.y;s+=joy.x;const m=Math.hypot(f,s);const px=me.x,pz=me.z;
     const follower=myLink&&!myLink.lead&&!me.sit?others.get(myLink.w):null,hugLead=myLink&&myLink.lead&&(myLink.k==="hug"||myLink.k==="kiss");
-    if(follower){const o=follower,k=Math.min(1,dt*10);const[tx,tz,ty]=followTarget(o,false);
-      me.x+=(tx-me.x)*k;me.z+=(tz-me.z)*k;me.yaw=angLerp(me.yaw,ty,k)}
+    if(follower){const[tx,tz,ty]=followTarget(follower,false);me.x=tx;me.z=tz;me.yaw=ty}
     else if(me.sit){if(m>.3)standUp()}
     else if(!hugLead&&m>.05){if(m>1){f/=m;s/=m}const sp=(keys.has("ShiftLeft")||keys.has("ShiftRight")?5.5:2.8)*dt,sy=Math.sin(me.camYaw),cy=Math.cos(me.camYaw);
       const dx=(-sy*f+cy*s)*sp,dz=(-cy*f-sy*s)*sp;if(!collides(me.x+dx,me.z))me.x+=dx;if(!collides(me.x,me.z+dz))me.z+=dz;
@@ -1649,6 +1650,7 @@ function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;l
   knot.rotation.y+=dt*.35;knot.rotation.x=Math.sin(t*.4)*.3;
   for(const d of drops){d.t=(d.t+dt*.6)%1;const r=.4+d.t*1.4;d.m.position.set(Math.sin(d.a)*r,1.9+Math.sin(d.t*PI)*.7-d.t*1.4,24+Math.cos(d.a)*r)}
   for(const o of others.values()){const k=Math.min(1,dt*10),ox=o.x,oz=o.z;o.x+=(o.tx-o.x)*k;o.z+=(o.tz-o.z)*k;o.y=angLerp(o.y,o.ty,k);
+    if(myLink&&myLink.lead&&others.get(myLink.w)===o&&o.p!=="sit"&&o.lk&&o.lk.id===myLink.id){const[fx,fz,fy]=linkSpot(me.x,me.z,me.yaw);o.x=fx;o.z=fz;o.y=fy}
     o.speed=o.speed*.8+.2*Math.hypot(o.x-ox,o.z-oz)/Math.max(dt,1e-3);o.h=(o.h||0)+((o.th||0)-(o.h||0))*k;o.av.g.position.set(o.x,o.h,o.z);o.av.g.rotation.y=o.y;poseAvatar(o.av,o.p,o.speed,dt,t,o.hk);
     if(o.bubble&&now>o.bubbleUntil){o.av.g.remove(o.bubble);o.bubble=null}}
   for(let i=floaters.length-1;i>=0;i--){const fl=floaters[i];fl.t+=dt;fl.s.position.y+=dt*.7;fl.s.position.x+=fl.vx*dt;fl.s.material.opacity=Math.max(0,1-fl.t/2.2);if(fl.t>2.2){scene.remove(fl.s);fl.s.material.dispose();floaters.splice(i,1)}}
