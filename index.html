@@ -1459,12 +1459,12 @@ function nearestOther(maxD){let best=null,bd=maxD;for(const o of others.values()
 function freeSeat(){let best=null,bd=1.9;for(const s of seats){const d=Math.hypot(s.x-me.x,s.z-me.z);if(d>=bd)continue;let taken=false;for(const o of others.values())if(o.p==="sit"&&Math.hypot(o.x-s.x,o.z-s.z)<.3)taken=true;if(!taken){bd=d;best=s}}return best}
 function standUp(){if(!me.sit)return;const s=me.sit;me.sit=null;const fx=s.x-Math.sin(s.yaw)*.8,fz=s.z-Math.cos(s.yaw)*.8;if(!collides(fx,fz)){me.x=fx;me.z=fz}}
 function doAction(k){if(!entered)return;
-  if(k==="sit"){if(me.sit){standUp();return}if(myLink&&!myLink.lead)return;const s=freeSeat();if(!s){toast("Ойролцоо сул суудал алга. Вандан сандал руу ойртоорой.");return}if(myLink)endLink();me.sit=s;me.x=s.x;me.z=s.z;me.yaw=me.camYaw=s.yaw;return}
+  if(k==="sit"){if(me.sit){standUp();return}if(myLink&&myLink.k!=="hand"&&!myLink.lead)return;const s=freeSeat();if(!s){toast("Ойролцоо сул суудал алга. Вандан сандал руу ойртоорой.");return}if(myLink&&myLink.k!=="hand")endLink();me.sit=s;me.x=s.x;me.z=s.z;me.yaw=me.camYaw=s.yaw;return}
   if(k==="unlink"){endLink();return}
   if(k==="hand"||k==="hug"||k==="kiss"){if(myLink){endLink();return}const o=nearestOther(3);if(!o){toast(others.size?"Хамтрагчдаа ойртоорой (3 метр дотор).":"Хамтрагч тань одоогоор энд алга.");return}
-    if(myReq){toast("Хариу хүлээж байна…");return}if(me.sit)standUp();myReq={k,to:o.peer,id:uid(),t:performance.now()};pres({rq:{k,to:o.peer,id:myReq.id}});toast(o.name+"-д "+ACT_TXT[k]+" хүсэлт илгээлээ.")}}
+    if(myReq){toast("Хариу хүлээж байна…");return}if(me.sit&&k!=="hand")standUp();myReq={k,to:o.peer,id:uid(),t:performance.now()};pres({rq:{k,to:o.peer,id:myReq.id}});toast(o.name+"-д "+ACT_TXT[k]+" хүсэлт илгээлээ.")}}
 function showReq(){if(!incoming)return;$("reqTxt").textContent=incoming.name+(incoming.k==="hand"?" тантай хөтлөлцөхийг хүсэж байна.":incoming.k==="kiss"?" таныг үнсэхийг хүсэж байна.":" таныг тэврэхийг хүсэж байна.");$("req").hidden=false}
-$("reqYes").onclick=()=>{if(!incoming)return;const r=incoming;incoming=null;$("req").hidden=true;handledReq.add(r.id);if(me.sit)standUp();if(myLink)endLink(true);
+$("reqYes").onclick=()=>{if(!incoming)return;const r=incoming;incoming=null;$("req").hidden=true;handledReq.add(r.id);if(me.sit&&r.k!=="hand")standUp();if(myLink)endLink(true);
   myLink={k:r.k,w:r.from,id:r.id,lead:false,t:performance.now()};pres({ac:{id:r.id,ok:true},lk:{k:r.k,w:r.from,id:r.id}});startLinkFx()};
 $("reqNo").onclick=()=>{if(!incoming)return;handledReq.add(incoming.id);pres({ac:{id:incoming.id,ok:false}});incoming=null;$("req").hidden=true};
 function startLinkFx(){const kiss=myLink&&myLink.k==="kiss";for(let i=0;i<(kiss?7:3);i++)setTimeout(()=>floatEmoji(kiss&&i%2?"💋":"❤️",me.x+(Math.random()-.5)*.6,2.1,me.z+(Math.random()-.5)*.6),i*250);toast(kiss?"Үнсэлт 💋":myLink&&myLink.k==="hug"?"Тэврэлт ♥":"Хөтлөлцөж байна ♥ "+(myLink&&myLink.lead?"Та хөтөлж алхана.":"Хамтрагч тань хөтөлж алхана."))}
@@ -1473,7 +1473,7 @@ function checkLink(now){if(!myLink)return;const o=others.get(myLink.w),age=now-m
   const ok=o&&o.lk&&o.lk.id===myLink.id;if(!o||(o.lk&&o.lk.id!==myLink.id)||(!ok&&age>5000)||((myLink.k==="hug"||myLink.k==="kiss")&&age>6500)){endLink(true)}}
 let actKey="";
 function updActions(){const acts=[];
-  if(me.sit)acts.push(["sit","Босох","E"]);else if(!(myLink&&!myLink.lead)&&freeSeat())acts.push(["sit","Суух","E"]);
+  if(me.sit)acts.push(["sit","Босох","E"]);else if(!(myLink&&!myLink.lead&&myLink.k!=="hand")&&freeSeat())acts.push(["sit","Суух","E"]);
   if(myLink)acts.push(["unlink",myLink.k==="hand"?"Гараа салгах":myLink.k==="kiss"?"Болих":"Тэврэлтээс гарах",""]);
   else if(nearestOther(3)){if(myReq)acts.push(["wait","Хариу хүлээж байна…",""]);else{acts.push(["hand","Хөтлөлцөх","H"]);acts.push(["hug","Тэврэх","G"]);acts.push(["kiss","Үнсэх","K"])}}
   const key=acts.map(a=>a[0]+a[1]).join("|");if(key===actKey)return;actKey=key;const box=$("actions");box.textContent="";
@@ -1603,14 +1603,26 @@ function sendPres(now,pose){if(!named||now-lastSentAt<=80)return;const st=[r2(me
   if(st!==lastSent){lastSent=st;lastSentAt=now;pres({x:r2(me.x),z:r2(me.z),y:r2(me.yaw),a:focused?focused.a.id:null,p:pose,hk:me.hk,h:r2(me.py)})}}
 // browsers pause animation frames in hidden or covered windows; this keeps links, following and presence alive there
 setInterval(()=>{const now=performance.now();if(!entered||!me.av||now-lastFrameAt<300)return;checkLink(now);
-  const o=myLink&&!myLink.lead?others.get(myLink.w):null;if(o){const[tx,tz,ty]=followTarget(o,true);me.x=tx;me.z=tz;me.yaw=ty}
+  const o=myLink&&!myLink.lead&&!me.sit?others.get(myLink.w):null;if(o){const[tx,tz,ty]=followTarget(o,true);me.x=tx;me.z=tz;me.yaw=ty}
   sendPres(now,currentPose())},250);
+/* ================= Hand-holding: both inner hands reach the same point, standing or sitting ================= */
+const _ikA=new THREE.Vector3(),_ikB=new THREE.Vector3(),_ikT=new THREE.Vector3(),_ikH=new THREE.Vector3();
+function armIK(arm,target){const sh=arm.sh;const p=sh.parent.worldToLocal(_ikT.copy(target)).sub(sh.position);const a=.3,b=.32;
+  const d=Math.min(a+b-.015,Math.max(.12,p.length()));const bend=PI-Math.acos(Math.max(-1,Math.min(1,(a*a+b*b-d*d)/(2*a*b))));
+  arm.el.rotation.set(-bend,0,0);_ikH.set(0,-a-b*Math.cos(bend),b*Math.sin(bend)).normalize();sh.quaternion.setFromUnitVectors(_ikH,p.normalize())}
+function holdHands(){if(!myLink||myLink.k!=="hand"||!me.av||!me.av.person)return;const o=others.get(myLink.w);if(!o||!o.av.person)return;
+  const mine=me.av.P.arms[myLink.lead?"R":"L"],theirs=o.av.P.arms[myLink.lead?"L":"R"];
+  me.av.g.updateMatrixWorld(true);o.av.g.updateMatrixWorld(true);mine.sh.getWorldPosition(_ikA);theirs.sh.getWorldPosition(_ikB);
+  if(_ikA.distanceTo(_ikB)>1.25)return;
+  const fy=Math.atan2(Math.sin(me.yaw)+Math.sin(o.y),Math.cos(me.yaw)+Math.cos(o.y));
+  _ikT.addVectors(_ikA,_ikB).multiplyScalar(.5);const T=new THREE.Vector3(_ikT.x-Math.sin(fy)*.08,_ikT.y-.5,_ikT.z-Math.cos(fy)*.08);
+  armIK(mine,T);armIK(theirs,T)}
 function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;lastFrameAt=now;perfTick(now);
   if(entered&&me.av){
     checkLink(now);if(myReq&&now-myReq.t>20000){myReq=null;pres({rq:null});toast("Хариу ирсэнгүй.")}
     let f=0,s=0;if(!typing()){if(keys.has("KeyW")||keys.has("ArrowUp"))f++;if(keys.has("KeyS")||keys.has("ArrowDown"))f--;if(keys.has("KeyD"))s++;if(keys.has("KeyA"))s--;if(keys.has("ArrowLeft"))me.camYaw+=1.8*dt;if(keys.has("ArrowRight"))me.camYaw-=1.8*dt}
     f-=joy.y;s+=joy.x;const m=Math.hypot(f,s);const px=me.x,pz=me.z;
-    const follower=myLink&&!myLink.lead?others.get(myLink.w):null,hugLead=myLink&&myLink.lead&&(myLink.k==="hug"||myLink.k==="kiss");
+    const follower=myLink&&!myLink.lead&&!me.sit?others.get(myLink.w):null,hugLead=myLink&&myLink.lead&&(myLink.k==="hug"||myLink.k==="kiss");
     if(follower){const o=follower,k=Math.min(1,dt*10);const[tx,tz,ty]=followTarget(o,false);
       me.x+=(tx-me.x)*k;me.z+=(tz-me.z)*k;me.yaw=angLerp(me.yaw,ty,k)}
     else if(me.sit){if(m>.3)standUp()}
@@ -1640,6 +1652,7 @@ function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;l
     o.speed=o.speed*.8+.2*Math.hypot(o.x-ox,o.z-oz)/Math.max(dt,1e-3);o.h=(o.h||0)+((o.th||0)-(o.h||0))*k;o.av.g.position.set(o.x,o.h,o.z);o.av.g.rotation.y=o.y;poseAvatar(o.av,o.p,o.speed,dt,t,o.hk);
     if(o.bubble&&now>o.bubbleUntil){o.av.g.remove(o.bubble);o.bubble=null}}
   for(let i=floaters.length-1;i>=0;i--){const fl=floaters[i];fl.t+=dt;fl.s.position.y+=dt*.7;fl.s.position.x+=fl.vx*dt;fl.s.material.opacity=Math.max(0,1-fl.t/2.2);if(fl.t>2.2){scene.remove(fl.s);fl.s.material.dispose();floaters.splice(i,1)}}
+  holdHands();
   renderer.render(scene,camera);requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 
