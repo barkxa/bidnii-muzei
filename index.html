@@ -211,6 +211,7 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,7vw,40px);l
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1352,12 +1353,28 @@ $("lobbyForm").addEventListener("submit",e=>{e.preventDefault();store.set("md.ch
 /* ================= Outside claude.ai: direct peer-to-peer link (PeerJS) + local photo store ================= */
 const ON_CLAUDE=!!(window.claude&&window.claude.use);
 const P2P_NS="bidnii-muzei-7k3q9x2m";
-const PeerLink={peer:null,conn:null,me:"",other:"",ls:{},retry:null,wait:4000,
+// when strict home or mobile networks block a direct link, messages go through public MQTT brokers instead
+const RELAYS=["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt"];
+const ICE=[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:global.stun.twilio.com:3478"},
+  {urls:["turn:openrelay.metered.ca:80","turn:openrelay.metered.ca:443","turn:openrelay.metered.ca:443?transport=tcp"],username:"openrelayproject",credential:"openrelayproject"}];
+const PeerLink={peer:null,conn:null,me:"",other:"",ls:{},retry:null,wait:4000,online:false,rcs:[],rLast:0,rSeq:0,rSid:Math.random().toString(36).slice(2,8),rSeen:new Set(),rTimer:null,
   on(t,f){(this.ls[t]=this.ls[t]||[]).push(f)},emit(t,d){(this.ls[t]||[]).forEach(f=>{try{f(d)}catch(e){}})},
-  isOpen(){return !!(this.conn&&this.conn.open)},
-  send(msg){if(this.isOpen())try{this.conn.send(msg)}catch(e){}},
-  start(myChar){if(!window.Peer)return false;this.stop();const other=myChar==="barkhas"?"bolormaa":"barkhas";this.me=myChar;this.other=other;
-    const p=this.peer=new Peer(P2P_NS+"-"+myChar,{debug:0});
+  p2pOpen(){return !!(this.conn&&this.conn.open)},
+  relayAlive(){return performance.now()-this.rLast<9000},
+  isOpen(){return this.p2pOpen()||this.relayAlive()},
+  upd(){const o=this.isOpen();if(o!==this.online){this.online=o;this.emit(o?"open":"close")}},
+  send(msg){if(this.p2pOpen()){try{this.conn.send(msg)}catch(e){}}else if(this.relayAlive())this.rpub(msg)},
+  rpub(msg){const body=JSON.stringify({f:this.me,s:this.rSid,n:this.rSeq++,d:msg});this.rcs.forEach(c=>{if(c.connected)try{c.publish(P2P_NS+"/"+this.other,body)}catch(e){}})},
+  relayStart(){if(!window.mqtt)return;const topic=P2P_NS+"/"+this.me;
+    this.rcs=RELAYS.map(u=>{let c;try{c=mqtt.connect(u,{clientId:P2P_NS.slice(-6)+"-"+this.me+"-"+Math.random().toString(36).slice(2,8),reconnectPeriod:4000,connectTimeout:10000,clean:true})}catch(e){return null}
+      c.on("connect",()=>{c.subscribe(topic);this.rpub({t:"hb"})});c.on("error",()=>{});
+      c.on("message",(tp,buf)=>{let m;try{m=JSON.parse(buf.toString())}catch(e){return}if(!m||m.f!==this.other)return;
+        const key=m.s+":"+m.n;if(this.rSeen.has(key))return;this.rSeen.add(key);if(this.rSeen.size>400)this.rSeen=new Set([...this.rSeen].slice(-200));
+        this.rLast=performance.now();this.upd();if(m.d&&m.d.t!=="hb")this.emit("data",m.d)});return c}).filter(Boolean);
+    this.rTimer=setInterval(()=>{this.rpub({t:"hb"});this.upd()},3000)},
+  start(myChar){if(!window.Peer&&!window.mqtt)return false;this.stop();const other=myChar==="barkhas"?"bolormaa":"barkhas";this.me=myChar;this.other=other;
+    this.relayStart();if(!window.Peer)return true;
+    const p=this.peer=new Peer(P2P_NS+"-"+myChar,{debug:0,config:{iceServers:ICE}});
     p.on("open",()=>{if(this.me<this.other)this.dial();else setTimeout(()=>{if(!this.isOpen()&&this.peer===p&&p.open)this.attach(p.connect(P2P_NS+"-"+this.other,{reliable:true}))},1500)});
     p.on("connection",c=>this.attach(c));this.wait=4000;
     p.on("disconnected",()=>{if(this.peer===p&&!p.destroyed)try{p.reconnect()}catch(e){}});
@@ -1367,9 +1384,10 @@ const PeerLink={peer:null,conn:null,me:"",other:"",ls:{},retry:null,wait:4000,
     if(!this.isOpen()){if(this.conn){const old=this.conn;this.conn=null;try{old.close()}catch(e){}}if(this.peer.open)this.attach(this.peer.connect(P2P_NS+"-"+this.other,{reliable:true}))}
     this.retry=setTimeout(()=>this.dial(),this.wait);this.wait=Math.min(30000,this.wait*1.6)},
   attach(c){if(!c)return;if(this.isOpen()&&this.conn!==c){try{c.close()}catch(e){}return}this.conn=c;
-    c.on("open",()=>{if(this.conn===c){this.wait=4000;this.emit("open")}});c.on("data",d=>this.emit("data",d));
-    c.on("close",()=>{if(this.conn===c){this.conn=null;this.emit("close");if(this.me<this.other)this.dial()}});c.on("error",()=>{})},
-  stop(){clearTimeout(this.retry);const c=this.conn,p=this.peer;this.conn=null;this.peer=null;try{c&&c.close()}catch(e){}try{p&&p.destroy()}catch(e){}}};
+    c.on("open",()=>{if(this.conn===c){this.wait=4000;this.upd()}});c.on("data",d=>this.emit("data",d));
+    c.on("close",()=>{if(this.conn===c){this.conn=null;this.upd();if(this.me<this.other)this.dial()}});c.on("error",()=>{})},
+  stop(){clearTimeout(this.retry);clearInterval(this.rTimer);const c=this.conn,p=this.peer;this.conn=null;this.peer=null;try{c&&c.close()}catch(e){}try{p&&p.destroy()}catch(e){}
+    this.rcs.forEach(r=>{try{r.end(true)}catch(e){}});this.rcs=[];this.rLast=0;this.rSeen.clear();this.online=false}};
 PeerLink.on("status",s=>{if(s==="taken")toast("Энэ дүрээр өөр цонхонд аль хэдийн орсон байна. Нөгөө цонхоо хаагаад дахин нэвтэрнэ үү.",6000)});
 
 // the same small surface the claude.ai room offers, so the rest of the game does not care which one it talks to
@@ -1412,7 +1430,7 @@ async function enter(snap){
   me.sit=null;me.hk=0;myLink=null;myReq=null;
   setConn(false,"Холбогдож байна…");
   const room=await roomP;
-  if(!room){if(!ON_CLAUDE&&window.Peer){peerRoom.reset();named=peerRoom;PeerLink.start(profile.sex)}else{setConn(false,"Ганцаараа горим — холболт алга");toast("Хамтрагчтайгаа холбогдож чадсангүй. Интернэтээ шалгаад дахин нэвтэрнэ үү.",6000);return}}
+  if(!room){if(!ON_CLAUDE&&(window.Peer||window.mqtt)){peerRoom.reset();named=peerRoom;PeerLink.start(profile.sex)}else{setConn(false,"Ганцаараа горим — холболт алга");toast("Хамтрагчтайгаа холбогдож чадсангүй. Интернэтээ шалгаад дахин нэвтэрнэ үү.",6000);return}}
   else{try{named=await room.join(profile.code)}catch(err){setConn(false,"Өрөөнд орж чадсангүй");toast("Болзооны өрөөнд орж чадсангүй. Дахин оролдоно уу.",5000);return}}
   if(!entered){named.leave().catch(()=>{});named=null;return}
   named.onConnection(ok=>setConn(ok),()=>setConn(false,"Ганцаараа горим"));
