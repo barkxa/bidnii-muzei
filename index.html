@@ -159,15 +159,14 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,7vw,40px);l
       <div class="sub" id="seenTxt" hidden>Хамт үзсэн: 0</div>
     </div>
     <div class="tools">
-      <button class="tbtn" id="goPartner">♥ <span class="lbl-long">Хамтрагч руу очих</span></button>
-      <button class="tbtn" id="camBtn">◎ <span class="lbl-long" id="camLbl">3-р этгээд</span></button>
-      <button class="tbtn" id="lightBtn" aria-pressed="true">☀ <span class="lbl-long">Гэрэл</span></button>
-      <button class="tbtn" id="musicBtn" aria-pressed="false">♪ <span class="lbl-long">Хөгжим</span></button>
-      <button class="tbtn" id="leaveBtn">Гарах</button>
+      <button class="tbtn" id="goPartner">♥ <span class="lbl-long">Go</span></button>
+      <button class="tbtn" id="camBtn">◎ <span class="lbl-long" id="camLbl">3P</span></button>
+      <button class="tbtn" id="lightBtn" aria-pressed="true">☀ <span class="lbl-long">Light</span></button>
+      <button class="tbtn" id="musicBtn" aria-pressed="false">♪ <span class="lbl-long">Music</span></button>
+      <button class="tbtn" id="leaveBtn">Exit</button>
     </div>
   </div>
   <canvas id="map" width="280" height="390" aria-label="Газрын зураг"></canvas>
-  <div class="together" id="together" hidden>Хоёулаа хамт үзэж байна</div>
   <div class="toast" id="toast" hidden></div>
   <div class="req" id="req" hidden>
     <div id="reqTxt"></div>
@@ -1327,7 +1326,7 @@ joyEl.addEventListener("pointerdown",e=>{joy.id=e.pointerId;joyEl.setPointerCapt
 joyEl.addEventListener("pointermove",e=>{if(e.pointerId===joy.id)joyMove(e)});
 const joyEnd=e=>{if(e.pointerId!==joy.id)return;joy={x:0,y:0,id:null};knobEl.style.transform=""};joyEl.addEventListener("pointerup",joyEnd);joyEl.addEventListener("pointercancel",joyEnd);
 function joyMove(e){const r=joyEl.getBoundingClientRect();let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const m=Math.hypot(dx,dy),R=44;if(m>R){dx*=R/m;dy*=R/m}joy.x=dx/R;joy.y=dy/R;knobEl.style.transform="translate("+dx+"px,"+dy+"px)"}
-function toggleCam(){camMode=camMode==="tp"?"fp":"tp";me.pitch=camMode==="tp"?-.25:0;$("camLbl").textContent=camMode==="tp"?"3-р этгээд":"1-р этгээд"}
+function toggleCam(){camMode=camMode==="tp"?"fp":"tp";me.pitch=camMode==="tp"?-.25:0;$("camLbl").textContent=camMode==="tp"?"3P":"1P"}
 $("camBtn").onclick=toggleCam;
 $("jumpBtn").addEventListener("pointerdown",e=>{e.preventDefault();me.jump=true});
 
@@ -1451,7 +1450,7 @@ function syncPeers(list){
   if(named&&named.connected())setConn(true);
 }
 function showBubble(o,t){if(o.bubble)o.av.g.remove(o.bubble);o.bubble=bubbleSprite(t);o.bubble.position.y=2.55+o.bubble.scale.y/2;o.av.g.add(o.bubble);o.bubbleUntil=performance.now()+7000}
-function addLog(o,t){const log=$("log"),d=document.createElement("div");if(o){const b=document.createElement("b");b.style.color=o.color;b.textContent=o.name+": ";d.appendChild(b);d.appendChild(document.createTextNode(t))}else{d.style.color="var(--muted)";d.textContent=t}log.appendChild(d);while(log.children.length>5)log.removeChild(log.firstChild)}
+function addLog(o,t){const log=$("log"),d=document.createElement("div");if(o){const b=document.createElement("b");b.style.color=o.color;b.textContent=o.name+": ";d.appendChild(b);d.appendChild(document.createTextNode(t))}else{d.style.color="var(--muted)";d.textContent=t;setTimeout(()=>d.remove(),3000)}log.appendChild(d);while(log.children.length>5)log.removeChild(log.firstChild)}
 
 /* ================= Actions: sit, hand, hug, eat ================= */
 const ACT_TXT={hand:"хөтлөлцөх",hug:"тэврэх",kiss:"үнсэх"};
@@ -1580,7 +1579,6 @@ function updateFocus(){fwd.set(-Math.sin(me.camYaw),0,-Math.cos(me.camYaw));let 
   for(const f of focusables){tmp.set(f.pos.x-me.x,0,f.pos.z-me.z);const d=tmp.length();if(d>f.range)continue;tmp.normalize();if(tmp.dot(fwd)<.5)continue;if(f.n&&(me.x-f.pos.x)*f.n.x+(me.z-f.pos.z)*f.n.z<.5)continue;if(d<bd){bd=d;best=f}}
   setFocus(best);
   let together=false;if(best)for(const o of others.values())if(o.a===best.a.id)together=true;
-  $("together").hidden=!together;
   if(together&&!best.a.photo&&!seen.has(best.a.id)){seen.add(best.a.id);store.set("md.seen."+profile.code,[...seen]);updSeen();floatEmoji("❤️",me.x,2.3,me.z);toast("Хамт үзсэн бүтээл нэмэгдлээ: "+best.a.title);if(seen.size===TOTAL)toast("Та хоёр музейн бүх бүтээлийг хамт үзлээ! Төгс болзоо ♥",6000)}}
 
 /* ================= Loop ================= */
