@@ -122,6 +122,7 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,7vw,40px);l
 #joy i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(243,235,227,.35)}
 
 @media (pointer:coarse){ #joy{display:block} .jump{display:block} }
+.fps{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(64px + env(safe-area-inset-top,0px));background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
 .jump{display:none;position:fixed;right:max(18px,env(safe-area-inset-right,0px));bottom:calc(130px + env(safe-area-inset-bottom,0px));width:72px;height:72px;border-radius:50%;border:1px solid var(--gold);background:rgba(16,18,34,.6);color:var(--paper);font-weight:700;touch-action:none}
 @media (max-width:700px){
   #map{width:86px;height:120px;top:calc(60px + env(safe-area-inset-top,0px))}
@@ -191,6 +192,7 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(30px,7vw,40px);l
   <div class="log" id="log" aria-live="polite"></div>
   <div id="joy" aria-hidden="true"><i id="knob"></i></div>
   <div class="actions" id="actions"></div>
+  <div class="fps" id="fps" hidden></div>
   <button class="jump" id="jumpBtn" type="button">Үсрэх</button>
 
   <div class="bottom">
@@ -1311,7 +1313,7 @@ function camBlocked(x,z){if(!inWorld(x,z))return true;for(const b of solids)if(b
 function inBuilding(x,z){return(Math.abs(x)<20&&Math.abs(z)<12)||(Math.abs(x)<12&&z>-28&&z<=-12)||(x>-20&&x<-12&&z>-28&&z<=-12)}
 function typing(){const a=document.activeElement;return a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA")}
 addEventListener("keydown",e=>{if(typing()||!entered)return;keys.add(e.code);if(e.code.startsWith("Arrow"))e.preventDefault();
-  if(e.repeat)return;if(e.code==="KeyE")doAction("sit");if(e.code==="KeyH")doAction("hand");if(e.code==="KeyG")doAction("hug");if(e.code==="KeyK")doAction("kiss");if(e.code==="KeyV")toggleCam()});
+  if(e.repeat)return;if(e.code==="KeyE")doAction("sit");if(e.code==="KeyH")doAction("hand");if(e.code==="KeyG")doAction("hug");if(e.code==="KeyK")doAction("kiss");if(e.code==="KeyV")toggleCam();if(e.code==="KeyP"){PERF.show=!PERF.show;$("fps").hidden=!PERF.show;$("fps").textContent="…"}});
 addEventListener("keydown",e=>{if(e.code==="Space"&&entered&&!typing()){e.preventDefault();me.jump=true}});
 addEventListener("keyup",e=>keys.delete(e.code));
 addEventListener("blur",()=>keys.clear());
@@ -1583,7 +1585,15 @@ function updateFocus(){fwd.set(-Math.sin(me.camYaw),0,-Math.cos(me.camYaw));let 
 
 /* ================= Loop ================= */
 let last=performance.now(),actT=0;
-function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;
+/* ================= Adaptive quality: drop the render resolution while the frame rate is low ================= */
+const PERF={base:Math.min(window.devicePixelRatio||1,1.25),pr:0,n:0,t0:0,good:0,show:false};PERF.pr=PERF.base;
+function applyPR(){PERF.good=0;renderer.setPixelRatio(PERF.pr);resize()}
+function perfTick(now){PERF.n++;if(!PERF.t0){PERF.t0=now;return}const el=now-PERF.t0;if(el<2000)return;const fps=PERF.n*1000/el;PERF.n=0;PERF.t0=now;
+  if(document.hidden||el>4000)return;
+  if(fps<45&&PERF.pr>.5){PERF.pr=Math.max(.5,+(PERF.pr-.2).toFixed(2));applyPR()}
+  else if(fps>57){if(++PERF.good>=3&&PERF.pr<PERF.base){PERF.pr=Math.min(PERF.base,+(PERF.pr+.1).toFixed(2));applyPR()}}else PERF.good=0;
+  if(PERF.show)$("fps").textContent=Math.round(fps)+" FPS · "+PERF.pr.toFixed(2)+"x"}
+function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;perfTick(now);
   if(entered&&me.av){
     checkLink(now);if(myReq&&now-myReq.t>20000){myReq=null;pres({rq:null});toast("Хариу ирсэнгүй.")}
     let f=0,s=0;if(!typing()){if(keys.has("KeyW")||keys.has("ArrowUp"))f++;if(keys.has("KeyS")||keys.has("ArrowDown"))f--;if(keys.has("KeyD"))s++;if(keys.has("KeyA"))s--;if(keys.has("ArrowLeft"))me.camYaw+=1.8*dt;if(keys.has("ArrowRight"))me.camYaw-=1.8*dt}
