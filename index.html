@@ -1278,8 +1278,8 @@ function posePerson(av,pose,speed,dt){const P=av.P;
   if(pose==="kiss"){if(av.scale<1){P.spine.rotation.set(.02,0,0);P.headPivot.rotation.set(-.48,.3,.08);AL.sh.rotation.set(-2.05,0,-.35);AR.sh.rotation.set(-2.05,0,.35);AL.el.rotation.set(-.55,0,-.5);AR.el.rotation.set(-.55,0,.5)}
     else{P.spine.rotation.set(.22,0,0);P.headPivot.rotation.set(.42,-.3,-.08);AL.sh.rotation.set(-.75,0,-.32);AR.sh.rotation.set(-.75,0,.32);AL.el.rotation.set(-.8,0,-.6);AR.el.rotation.set(-.8,0,.6)}}
   if(pose==="hug"){AL.sh.rotation.set(-1.25,0,-.4);AR.sh.rotation.set(-1.25,0,.4);AL.el.rotation.set(-.2,0,-.9);AR.el.rotation.set(-.2,0,.9);P.headPivot.rotation.set(.12,.35,0)}
-  if(pose==="hand-r"){AR.sh.rotation.set(-.12,0,-.4);AR.el.rotation.set(-.08,0,0)}
-  if(pose==="hand-l"){AL.sh.rotation.set(-.12,0,.4);AL.el.rotation.set(-.08,0,0)}
+  // inner hands meet at about .83 m between the two: he reaches down, she lifts her arm out to him
+  if(pose==="hand-r"||pose==="hand-l"){const A=pose==="hand-r"?AR:AL,s=pose==="hand-r"?-1:1,z=av.scale<1?.74:.1;A.sh.rotation.set(.06,0,z*s);A.el.rotation.set(-.3,0,0)}
   if(pose==="jump"){L.hip.rotation.set(-.55,0,.05);R.hip.rotation.set(-.25,0,-.05);L.knee.rotation.set(1.0,0,0);R.knee.rotation.set(.6,0,0);AL.sh.rotation.set(-.3,0,.9);AR.sh.rotation.set(-.3,0,-.9);AL.el.rotation.set(-.4,0,0);AR.el.rotation.set(-.4,0,0)}
   P.blink-=dt;let bs=1;if(P.blink<0){const p=-P.blink/.14;bs=Math.max(.08,Math.abs(1-2*Math.min(1,p)));if(p>=1)P.blink=2+Math.random()*3}
   P.eyes.forEach((e,i)=>{if(i%2===0)e.scale.y=.78*bs;else e.visible=bs>.5})}
@@ -1596,7 +1596,7 @@ function perfTick(now){PERF.n++;if(!PERF.t0){PERF.t0=now;return}const el=now-PER
 /* ================= Keep the partner in sync even when this window is in the background ================= */
 let lastFrameAt=0;
 function followTarget(o,raw){const ox=raw?o.tx:o.x,oz=raw?o.tz:o.z,oy=raw?o.ty:o.y;
-  if(myLink.k==="hand")return[ox+Math.cos(oy)*.76,oz-Math.sin(oy)*.76,oy];
+  if(myLink.k==="hand")return[ox+Math.cos(oy)*.82,oz-Math.sin(oy)*.82,oy];
   const D=myLink.k==="kiss"?.54:.36;return[ox-Math.sin(oy)*D,oz-Math.cos(oy)*D,oy+PI]}
 function currentPose(){return me.sit?"sit":myLink?(myLink.k==="hug"?"hug":myLink.k==="kiss"?"kiss":(myLink.lead?"hand-r":"hand-l")):me.py>.05?"jump":null}
 function sendPres(now,pose){if(!named||now-lastSentAt<=80)return;const st=[r2(me.x),r2(me.z),r2(me.yaw),focused?focused.a.id:"",pose||"",me.hk,r2(me.py)].join(",");
