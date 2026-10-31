@@ -510,7 +510,7 @@ ART.forEach(a=>{if(IMG[a.id]){a.img="img/"+a.id+".jpg";a.w=IMG[a.id][0];a.h=IMG[
 
 /* ================= Three.js world ================= */
 const host=$("scene");
-const renderer=new THREE.WebGLRenderer({antialias:true});
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:"high-performance"});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.25));
 renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
 renderer.shadowMap.enabled=false;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -1045,7 +1045,7 @@ const FLOOD=[];const floodHead=new THREE.MeshBasicMaterial({color:"#fff3d0"}),fl
   [[-8,15],[8,15],[-8,32],[8,32]].forEach(([x,z])=>{const l=new THREE.PointLight("#ffd7a0",1.1,20,1.4);l.position.set(x,3.1,z);scene.add(l)});
 })();
 let floodOn=true;
-function setFlood(on){floodOn=on;FLOOD.forEach(s=>s.intensity=on?s.userData.on:0);floodHead.color.set(on?"#fff3d0":"#2a2a30");
+function setFlood(on){floodOn=on;FLOOD.forEach(s=>{s.intensity=on?s.userData.on:0;s.visible=on});floodHead.color.set(on?"#fff3d0":"#2a2a30");
   const b=document.getElementById("lightBtn");if(b)b.setAttribute("aria-pressed",String(on))}
 
 /* ----- small label stands for statues, sculptures and buildings (info on hover/tap, like the painting plaques) ----- */
@@ -1590,7 +1590,7 @@ const PERF={base:Math.min(window.devicePixelRatio||1,1.25),pr:0,n:0,t0:0,good:0,
 function applyPR(){PERF.good=0;renderer.setPixelRatio(PERF.pr);resize()}
 function perfTick(now){PERF.n++;if(!PERF.t0){PERF.t0=now;return}const el=now-PERF.t0;if(el<2000)return;const fps=PERF.n*1000/el;PERF.n=0;PERF.t0=now;
   if(document.hidden||el>4000)return;
-  if(fps<45&&PERF.pr>.5){PERF.pr=Math.max(.5,+(PERF.pr-.2).toFixed(2));applyPR()}
+  if(fps<42&&PERF.pr>.7){PERF.pr=Math.max(.7,+(PERF.pr-.15).toFixed(2));applyPR()}
   else if(fps>57){if(++PERF.good>=3&&PERF.pr<PERF.base){PERF.pr=Math.min(PERF.base,+(PERF.pr+.1).toFixed(2));applyPR()}}else PERF.good=0;
   if(PERF.show)$("fps").textContent=Math.round(fps)+" FPS · "+PERF.pr.toFixed(2)+"x"}
 function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;perfTick(now);
