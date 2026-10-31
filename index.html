@@ -1278,8 +1278,8 @@ function posePerson(av,pose,speed,dt){const P=av.P;
   if(pose==="kiss"){if(av.scale<1){P.spine.rotation.set(.02,0,0);P.headPivot.rotation.set(-.48,.3,.08);AL.sh.rotation.set(-2.05,0,-.35);AR.sh.rotation.set(-2.05,0,.35);AL.el.rotation.set(-.55,0,-.5);AR.el.rotation.set(-.55,0,.5)}
     else{P.spine.rotation.set(.22,0,0);P.headPivot.rotation.set(.42,-.3,-.08);AL.sh.rotation.set(-.75,0,-.32);AR.sh.rotation.set(-.75,0,.32);AL.el.rotation.set(-.8,0,-.6);AR.el.rotation.set(-.8,0,.6)}}
   if(pose==="hug"){AL.sh.rotation.set(-1.25,0,-.4);AR.sh.rotation.set(-1.25,0,.4);AL.el.rotation.set(-.2,0,-.9);AR.el.rotation.set(-.2,0,.9);P.headPivot.rotation.set(.12,.35,0)}
-  if(pose==="hand-r"){AR.sh.rotation.set(-.12,0,-.32);AR.el.rotation.set(-.08,0,0)}
-  if(pose==="hand-l"){AL.sh.rotation.set(-.12,0,.32);AL.el.rotation.set(-.08,0,0)}
+  if(pose==="hand-r"){AR.sh.rotation.set(-.12,0,-.4);AR.el.rotation.set(-.08,0,0)}
+  if(pose==="hand-l"){AL.sh.rotation.set(-.12,0,.4);AL.el.rotation.set(-.08,0,0)}
   if(pose==="jump"){L.hip.rotation.set(-.55,0,.05);R.hip.rotation.set(-.25,0,-.05);L.knee.rotation.set(1.0,0,0);R.knee.rotation.set(.6,0,0);AL.sh.rotation.set(-.3,0,.9);AR.sh.rotation.set(-.3,0,-.9);AL.el.rotation.set(-.4,0,0);AR.el.rotation.set(-.4,0,0)}
   P.blink-=dt;let bs=1;if(P.blink<0){const p=-P.blink/.14;bs=Math.max(.08,Math.abs(1-2*Math.min(1,p)));if(p>=1)P.blink=2+Math.random()*3}
   P.eyes.forEach((e,i)=>{if(i%2===0)e.scale.y=.78*bs;else e.visible=bs>.5})}
@@ -1593,14 +1593,25 @@ function perfTick(now){PERF.n++;if(!PERF.t0){PERF.t0=now;return}const el=now-PER
   if(fps<42&&PERF.pr>.7){PERF.pr=Math.max(.7,+(PERF.pr-.15).toFixed(2));applyPR()}
   else if(fps>57){if(++PERF.good>=3&&PERF.pr<PERF.base){PERF.pr=Math.min(PERF.base,+(PERF.pr+.1).toFixed(2));applyPR()}}else PERF.good=0;
   if(PERF.show)$("fps").textContent=Math.round(fps)+" FPS · "+PERF.pr.toFixed(2)+"x"}
-function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;perfTick(now);
+/* ================= Keep the partner in sync even when this window is in the background ================= */
+let lastFrameAt=0;
+function followTarget(o,raw){const ox=raw?o.tx:o.x,oz=raw?o.tz:o.z,oy=raw?o.ty:o.y;
+  if(myLink.k==="hand")return[ox+Math.cos(oy)*.76,oz-Math.sin(oy)*.76,oy];
+  const D=myLink.k==="kiss"?.54:.36;return[ox-Math.sin(oy)*D,oz-Math.cos(oy)*D,oy+PI]}
+function currentPose(){return me.sit?"sit":myLink?(myLink.k==="hug"?"hug":myLink.k==="kiss"?"kiss":(myLink.lead?"hand-r":"hand-l")):me.py>.05?"jump":null}
+function sendPres(now,pose){if(!named||now-lastSentAt<=80)return;const st=[r2(me.x),r2(me.z),r2(me.yaw),focused?focused.a.id:"",pose||"",me.hk,r2(me.py)].join(",");
+  if(st!==lastSent){lastSent=st;lastSentAt=now;pres({x:r2(me.x),z:r2(me.z),y:r2(me.yaw),a:focused?focused.a.id:null,p:pose,hk:me.hk,h:r2(me.py)})}}
+// browsers pause animation frames in hidden or covered windows; this keeps links, following and presence alive there
+setInterval(()=>{const now=performance.now();if(!entered||!me.av||now-lastFrameAt<300)return;checkLink(now);
+  const o=myLink&&!myLink.lead?others.get(myLink.w):null;if(o){const[tx,tz,ty]=followTarget(o,true);me.x=tx;me.z=tz;me.yaw=ty}
+  sendPres(now,currentPose())},250);
+function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;lastFrameAt=now;perfTick(now);
   if(entered&&me.av){
     checkLink(now);if(myReq&&now-myReq.t>20000){myReq=null;pres({rq:null});toast("Хариу ирсэнгүй.")}
     let f=0,s=0;if(!typing()){if(keys.has("KeyW")||keys.has("ArrowUp"))f++;if(keys.has("KeyS")||keys.has("ArrowDown"))f--;if(keys.has("KeyD"))s++;if(keys.has("KeyA"))s--;if(keys.has("ArrowLeft"))me.camYaw+=1.8*dt;if(keys.has("ArrowRight"))me.camYaw-=1.8*dt}
     f-=joy.y;s+=joy.x;const m=Math.hypot(f,s);const px=me.x,pz=me.z;
     const follower=myLink&&!myLink.lead?others.get(myLink.w):null,hugLead=myLink&&myLink.lead&&(myLink.k==="hug"||myLink.k==="kiss");
-    if(follower){const o=follower,k=Math.min(1,dt*10);let tx,tz,ty;
-      if(myLink.k==="hand"){tx=o.x+Math.cos(o.y)*.85;tz=o.z-Math.sin(o.y)*.85;ty=o.y}else{const D=myLink.k==="kiss"?.54:.55;tx=o.x-Math.sin(o.y)*D;tz=o.z-Math.cos(o.y)*D;ty=o.y+PI}
+    if(follower){const o=follower,k=Math.min(1,dt*10);const[tx,tz,ty]=followTarget(o,false);
       me.x+=(tx-me.x)*k;me.z+=(tz-me.z)*k;me.yaw=angLerp(me.yaw,ty,k)}
     else if(me.sit){if(m>.3)standUp()}
     else if(!hugLead&&m>.05){if(m>1){f/=m;s/=m}const sp=(keys.has("ShiftLeft")||keys.has("ShiftRight")?5.5:2.8)*dt,sy=Math.sin(me.camYaw),cy=Math.cos(me.camYaw);
@@ -1619,7 +1630,7 @@ function frame(now){const dt=Math.min(.05,(now-last)/1000),t=now/1000;last=now;p
       while(d<3.6){const cx=me.x-dx*(d+.1),cz=me.z-dz*(d+.1);if(camBlocked(cx,cz))break;d+=.1}
       let cy2=ty-dy*d;if(inBuilding(me.x-dx*d,me.z-dz*d))cy2=Math.min(cy2,4.6);camera.position.set(me.x-dx*d,Math.max(.3,cy2),me.z-dz*d);camera.lookAt(me.x,ty,me.z)}
     updateFocus();updateHover(now);
-    if(named&&now-lastSentAt>80){const st=[r2(me.x),r2(me.z),r2(me.yaw),focused?focused.a.id:"",pose||"",me.hk,r2(me.py)].join(",");if(st!==lastSent){lastSent=st;lastSentAt=now;pres({x:r2(me.x),z:r2(me.z),y:r2(me.yaw),a:focused?focused.a.id:null,p:pose,hk:me.hk,h:r2(me.py)})}}
+    sendPres(now,pose);
     actT-=dt;if(actT<=0){actT=.2;updActions()}
     if(entered)drawMap();
   }else{const a=t*.06;camera.position.set(Math.sin(a)*16,7,34+Math.cos(a)*6);camera.lookAt(0,3,12)}
