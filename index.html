@@ -509,9 +509,9 @@ ART.forEach(a=>{if(IMG[a.id]){a.img="img/"+a.id+".jpg";a.w=IMG[a.id][0];a.h=IMG[
 /* ================= Three.js world ================= */
 const host=$("scene");
 const renderer=new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.25));
 renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled=false;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 host.appendChild(renderer.domElement);
 const scene=new THREE.Scene();scene.background=new THREE.Color("#070b18");scene.fog=new THREE.Fog("#0a1024",45,150);
 const camera=new THREE.PerspectiveCamera(68,1,.05,320);camera.rotation.order="YXZ";
@@ -521,7 +521,7 @@ addEventListener("resize",resize);resize();
 scene.add(new THREE.HemisphereLight("#41558a","#141320",.36));
 scene.add(new THREE.AmbientLight("#8090c0",.09));
 const sun=new THREE.DirectionalLight("#a9bbe8",.34);sun.position.set(-45,65,-100);sun.target.position.set(0,0,30);scene.add(sun,sun.target);
-sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-75,right:75,top:80,bottom:-80,near:5,far:220});sun.shadow.camera.updateProjectionMatrix();sun.shadow.bias=-.0004;sun.shadow.normalBias=.04;
+sun.castShadow=false;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-75,right:75,top:80,bottom:-80,near:5,far:220});sun.shadow.camera.updateProjectionMatrix();sun.shadow.bias=-.0004;sun.shadow.normalBias=.04;
 [[-13.5,0],[0,0],[13.5,0],[0,-20],[-16,-20]].forEach(([x,z])=>{const l=new THREE.PointLight("#ffe6c8",1.15,28,1.5);l.position.set(x,4.4,z);scene.add(l)});
 
 function canvasTex(w,h,draw,repeat){const cv=document.createElement("canvas");cv.width=w;cv.height=h;draw(cv.getContext("2d"),w,h);const t=new THREE.CanvasTexture(cv);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;if(repeat){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(repeat[0],repeat[1])}return t}
@@ -1061,7 +1061,14 @@ function setFlood(on){floodOn=on;FLOOD.forEach(s=>s.intensity=on?s.userData.on:0
     addSolid(x-.12,x+.12,z-.12,z+.12)})})();
 
 // soft sun shadows on everything solid; flat-colour images stay untouched by tone mapping
-scene.traverse(o=>{if(!o.isMesh)return;const ms=[].concat(o.material);if(ms.some(m=>m.isMeshBasicMaterial||m.transparent))return;o.castShadow=true;o.receiveShadow=true});
+// performance: cheap per-vertex lighting everywhere, no shadow pass, and pointer picks test only plaques and the few things that can hide them
+const LAMB=new Map();
+function lambertize(m){if(!m||!(m.isMeshStandardMaterial||m.isMeshPhysicalMaterial))return m;let l=LAMB.get(m);if(l)return l;
+  l=new THREE.MeshLambertMaterial({color:m.color.clone(),map:m.map||null,emissive:m.emissive?m.emissive.clone():new THREE.Color(0),side:m.side,transparent:m.transparent,opacity:m.opacity,depthWrite:m.depthWrite,vertexColors:m.vertexColors});
+  if(m.metalness>.5)l.emissive.copy(m.color).multiplyScalar(.12);l.userData=Object.assign({},m.userData);LAMB.set(m,l);return l}
+function lambertizeTree(root){root.traverse(o=>{if(!o.material)return;o.material=Array.isArray(o.material)?o.material.map(lambertize):lambertize(o.material)})}
+lambertizeTree(scene);
+const PICKABLES=[];scene.traverse(o=>{if(o.isMesh&&(o.userData.hover!=null||o.userData.noHover))PICKABLES.push(o)});
 scene.traverse(o=>{if(o.material)[].concat(o.material).forEach(m=>{if(m.isMeshBasicMaterial)m.toneMapped=false})});
 
 /* ================= Avatars: Бархас & Болормаа (ported from «Миний 3D дүр») ================= */
@@ -1248,7 +1255,7 @@ function buildCharacter(id){
   const P=id==="bolormaa"?PersonKit.her():PersonKit.him();
   const g=new THREE.Group();P.root.rotation.y=PI;g.add(P.root);
   const sh=new THREE.Mesh(SHADOW_GEO,SHADOW);sh.rotation.x=-PI/2;sh.position.y=.02;g.add(sh);
-  g.traverse(o=>{if(o.material&&!o.material.userData.lin&&o.material!==SHADOW){o.material.userData.lin=1;o.material.color.convertSRGBToLinear()}});
+  g.traverse(o=>{if(o.material&&!o.material.userData.lin&&o.material!==SHADOW){o.material.userData.lin=1;o.material.color.convertSRGBToLinear()}});lambertizeTree(g);
   return{g,P,person:true,phase:0,scale:P.root.scale.x}}
 function makeAvatar(o){const h=buildCharacter(charId(o.sex));h.g.userData.noHover=1;scene.add(h.g);return h}
 function previewImg(id){try{const r=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});r.setPixelRatio(2);r.setSize(200,260);
@@ -1344,22 +1351,22 @@ $("lobbyForm").addEventListener("submit",e=>{e.preventDefault();store.set("md.ch
 /* ================= Outside claude.ai: direct peer-to-peer link (PeerJS) + local photo store ================= */
 const ON_CLAUDE=!!(window.claude&&window.claude.use);
 const P2P_NS="bidnii-muzei-7k3q9x2m";
-const PeerLink={peer:null,conn:null,me:"",other:"",ls:{},retry:null,
+const PeerLink={peer:null,conn:null,me:"",other:"",ls:{},retry:null,wait:4000,
   on(t,f){(this.ls[t]=this.ls[t]||[]).push(f)},emit(t,d){(this.ls[t]||[]).forEach(f=>{try{f(d)}catch(e){}})},
   isOpen(){return !!(this.conn&&this.conn.open)},
   send(msg){if(this.isOpen())try{this.conn.send(msg)}catch(e){}},
   start(myChar){if(!window.Peer)return false;this.stop();const other=myChar==="barkhas"?"bolormaa":"barkhas";this.me=myChar;this.other=other;
     const p=this.peer=new Peer(P2P_NS+"-"+myChar,{debug:0});
-    p.on("open",()=>{if(this.me<this.other)this.dial()});
-    p.on("connection",c=>this.attach(c));
+    p.on("open",()=>{if(this.me<this.other)this.dial();else setTimeout(()=>{if(!this.isOpen()&&this.peer===p&&p.open)this.attach(p.connect(P2P_NS+"-"+this.other,{reliable:true}))},1500)});
+    p.on("connection",c=>this.attach(c));this.wait=4000;
     p.on("disconnected",()=>{if(this.peer===p&&!p.destroyed)try{p.reconnect()}catch(e){}});
     p.on("error",e=>{if(e&&e.type==="unavailable-id")this.emit("status","taken")});
     return true},
   dial(){clearTimeout(this.retry);if(!this.peer||this.peer.destroyed)return;
     if(!this.isOpen()){if(this.conn){const old=this.conn;this.conn=null;try{old.close()}catch(e){}}if(this.peer.open)this.attach(this.peer.connect(P2P_NS+"-"+this.other,{reliable:true}))}
-    this.retry=setTimeout(()=>this.dial(),5000)},
+    this.retry=setTimeout(()=>this.dial(),this.wait);this.wait=Math.min(30000,this.wait*1.6)},
   attach(c){if(!c)return;if(this.isOpen()&&this.conn!==c){try{c.close()}catch(e){}return}this.conn=c;
-    c.on("open",()=>{if(this.conn===c)this.emit("open")});c.on("data",d=>{if(this.conn===c)this.emit("data",d)});
+    c.on("open",()=>{if(this.conn===c){this.wait=4000;this.emit("open")}});c.on("data",d=>this.emit("data",d));
     c.on("close",()=>{if(this.conn===c){this.conn=null;this.emit("close");if(this.me<this.other)this.dial()}});c.on("error",()=>{})},
   stop(){clearTimeout(this.retry);const c=this.conn,p=this.peer;this.conn=null;this.peer=null;try{c&&c.close()}catch(e){}try{p&&p.destroy()}catch(e){}}};
 PeerLink.on("status",s=>{if(s==="taken")toast("Энэ дүрээр өөр цонхонд аль хэдийн орсон байна. Нөгөө цонхоо хаагаад дахин нэвтэрнэ үү.",6000)});
@@ -1541,7 +1548,7 @@ $("capIn").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault()
 const ray=new THREE.Raycaster();ray.far=45;const ndc=new THREE.Vector2();
 let hoverF=null,pinnedF=null,cardF=null,overCard=false,hoverAt=0,ptr={x:0,y:0,in:false},tapStart=null;
 function pickAt(cx,cy){const r=cv.getBoundingClientRect();ndc.set((cx-r.left)/r.width*2-1,-(cy-r.top)/r.height*2+1);ray.setFromCamera(ndc,camera);
-  const hits=ray.intersectObjects(scene.children,true);
+  const hits=ray.intersectObjects(PICKABLES,false);
   for(const h of hits){if(h.object.isSprite||!h.object.visible)continue;let o=h.object,tag=null,skip=false;
     while(o){if(o.userData.hover!=null){tag=o.userData.hover;break}if(o.userData.noHover){skip=true;break}o=o.parent}
     if(tag!=null&&Math.hypot(h.point.x-me.x,h.point.z-me.z)<7)return focusables[tag];return null}
